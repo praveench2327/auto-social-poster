@@ -12,7 +12,7 @@ import {
   inspectPageToken,
   metaConfigured,
 } from "./graph";
-import { ensurePublisherLoop, flushDueForUser } from "./publisher";
+import { ensurePublisherLoop, flushDueForUser, publishOnePost } from "./publisher";
 
 function randomNonce() {
   const bytes = new Uint8Array(16);
@@ -356,12 +356,23 @@ export const retryPost = createServerFn({ method: "POST" })
   .middleware([authMiddleware])
   .handler(async ({ context, data }) => {
     const sql = await getSql();
-    await sql`
+    // Mark as 'posting' and attempt to publish directly — never goes back to
+    // the queue so the user doesn't see it bounce between columns.
+    const rows = await sql<{
+      id: number;
+      user_id: string;
+      body: string;
+      image_url: string | null;
+    }>`
       update facebook_posts
-      set status = 'pending', error = null, publish_at = now()
+      set status = 'posting', error = null
       where id = ${data.id} and user_id = ${context.userId} and status = 'failed'
+      returning id, user_id, body, image_url
     `;
-    await flushDueForUser(context.userId);
+    const post = rows[0];
+    if (post) {
+      await publishOnePost(post);
+    }
     return { ok: true as const };
   });
 
