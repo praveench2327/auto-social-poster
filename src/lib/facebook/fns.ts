@@ -443,3 +443,14 @@ export const generateCaption = createServerFn({ method: "POST" })
     return { ok: true as const, text: templates[randomIndex] };
   });
 
+export const clearHistory = createServerFn({ method: "POST" })
+  .middleware([authMiddleware])
+  .handler(async ({ context }) => {
+    const sql = await getSql();
+    await sql`
+      delete from facebook_posts
+      where user_id = ${context.userId} and status not in ('pending', 'posting')
+    `;
+    return { ok: true as const };
+  });
+

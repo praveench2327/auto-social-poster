@@ -26,6 +26,7 @@ import {
   getFacebookStatus,
   listPosts,
   retryPost,
+  clearHistory,
   type PageStatus,
   type PostRow,
 } from "@/lib/facebook/fns";
@@ -127,6 +128,14 @@ export function Studio() {
       setTokenValue("");
       await refresh();
     }
+    setBusy(null);
+  }
+
+  async function onClearHistory() {
+    if (!window.confirm("Are you sure you want to clear all post history?")) return;
+    setBusy("clear");
+    await clearHistory();
+    await refresh();
     setBusy(null);
   }
 
@@ -362,6 +371,8 @@ export function Studio() {
             await retryPost({ data: { id } });
             await refresh();
           }}
+          onClear={onClearHistory}
+          isClearBusy={busy === "clear"}
         />
       </section>
     </div>
@@ -374,17 +385,34 @@ function QueueColumn({
   posts,
   onCancel,
   onRetry,
+  onClear,
+  isClearBusy,
 }: {
   title: string;
   empty: string;
   posts: PostRow[];
   onCancel?: (id: number) => Promise<void>;
   onRetry?: (id: number) => Promise<void>;
+  onClear?: () => Promise<void>;
+  isClearBusy?: boolean;
 }) {
   return (
     <div>
       <div className="mb-3 flex items-baseline justify-between">
-        <h2 className="font-display text-xl">{title}</h2>
+        <div className="flex items-center gap-2">
+          <h2 className="font-display text-xl">{title}</h2>
+          {onClear && posts.length > 0 && (
+            <Button
+              variant="ghost"
+              size="sm"
+              className="h-7 text-xs text-danger hover:bg-danger/10 hover:text-danger"
+              onClick={onClear}
+              disabled={isClearBusy}
+            >
+              Clear All
+            </Button>
+          )}
+        </div>
         <span className="text-xs tabular-nums text-fg-subtle">{posts.length}</span>
       </div>
       {posts.length === 0 ? (
