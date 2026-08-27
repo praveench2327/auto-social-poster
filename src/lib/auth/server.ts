@@ -114,18 +114,32 @@ const baseURL = explicitBaseURL ?? {
 };
 
 // Origins Better Auth accepts on credentialed POSTs (sign-up/sign-in, etc.).
-// Supports dynamic host resolution + all Vercel, Render and localhost origins.
-const trustedOrigins: string[] = [
-  ...(explicitBaseURL ? [explicitBaseURL, explicitBaseURL.replace(/^https?:\/\//, "")] : []),
-  ...previewAllowedHosts,
-  ...previewAllowedHosts.flatMap((host) => [`https://${host}`, `http://${host}`]),
-  ...LOCAL_DEV_ORIGINS,
-  "https://auto-social-poster-f6fs.onrender.com",
-  "http://auto-social-poster-f6fs.onrender.com",
-  "auto-social-poster-f6fs.onrender.com",
-  "*.onrender.com",
-  "*.vercel.app",
-];
+// Matches request origin dynamically or allows trusted wildcard patterns.
+const trustedOrigins = (request?: Request): string[] => {
+  const result: string[] = [
+    ...(explicitBaseURL ? [explicitBaseURL, explicitBaseURL.replace(/^https?:\/\//, "")] : []),
+    ...previewAllowedHosts,
+    ...previewAllowedHosts.flatMap((host) => [`https://${host}`, `http://${host}`]),
+    ...LOCAL_DEV_ORIGINS,
+    "https://auto-social-poster-f6fs.onrender.com",
+    "http://auto-social-poster-f6fs.onrender.com",
+    "auto-social-poster-f6fs.onrender.com",
+    "*.onrender.com",
+    "*.vercel.app",
+  ];
+  if (request) {
+    const origin = request.headers.get("origin") || request.headers.get("referer");
+    if (origin) {
+      try {
+        const u = new URL(origin);
+        result.push(u.origin);
+      } catch {
+        // ignore
+      }
+    }
+  }
+  return result;
+};
 
 const databaseUrl = env("DATABASE_URL");
 
