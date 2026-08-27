@@ -1,3 +1,4 @@
+import dns from "node:dns";
 import https from "node:https";
 
 const GRAPH = "https://graph.facebook.com/v21.0";
@@ -5,7 +6,9 @@ const DIALOG = "https://www.facebook.com/v21.0/dialog/oauth";
 
 // Force IPv4 for all Facebook API calls. On Windows, Node.js often tries IPv6
 // first for graph.facebook.com, which hangs for 10s then times out.
-const ipv4Agent = new https.Agent({ family: 4 });
+if (typeof dns.setDefaultResultOrder === "function") {
+  dns.setDefaultResultOrder("ipv4first");
+}
 
 export const FACEBOOK_SCOPES = [
   "public_profile",
@@ -51,9 +54,6 @@ export class FacebookApiError extends Error {
 
 /** Fetch wrapper that forces IPv4 to avoid Windows IPv6 timeouts. */
 function fbFetch(url: string, init?: RequestInit): Promise<Response> {
-  // Node 18+ fetch supports a dispatcher option, but the simplest cross-version
-  // approach is to set the global dns result order before each call.
-  const dns = require("node:dns") as typeof import("node:dns");
   if (typeof dns.setDefaultResultOrder === "function") {
     dns.setDefaultResultOrder("ipv4first");
   }
