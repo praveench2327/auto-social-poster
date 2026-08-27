@@ -225,39 +225,11 @@ function Login() {
               variant="secondary"
               className="w-full flex items-center justify-center gap-2 font-medium"
               disabled={isLoading}
-              onClick={async () => {
+              onClick={() => {
                 setIsLoading(true);
                 setError(null);
-                try {
-                  // Direct social sign in if configured, otherwise create/sign into local Google account
-                  const { error: gErr } = await authClient.signIn.social({
-                    provider: "google",
-                    callbackURL: "/",
-                  });
-                  if (gErr) {
-                    // Quick seamless fallback for local environment
-                    const demoEmail = "google.user@example.com";
-                    const { error: emailErr } = await authClient.signIn.email({
-                      email: demoEmail,
-                      password: "GoogleUserPass123!",
-                      callbackURL: "/",
-                    });
-                    if (emailErr) {
-                      await authClient.signUp.email({
-                        name: "Google User",
-                        email: demoEmail,
-                        password: "GoogleUserPass123!",
-                        callbackURL: "/",
-                      });
-                    }
-                    navigate({ to: "/" });
-                  }
-                } catch {
-                  // Seamless login
-                  navigate({ to: "/" });
-                } finally {
-                  setIsLoading(false);
-                }
+                // Better Auth direct Google social sign in endpoint
+                window.location.href = "/api/auth/sign-in/social?provider=google&callbackURL=/";
               }}
             >
               <svg className="size-4" viewBox="0 0 24 24">
