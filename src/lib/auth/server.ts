@@ -104,42 +104,33 @@ const LOCAL_DEV_ORIGINS: string[] = [
   "http://[::1]:8080",
 ];
 const baseURL = explicitBaseURL ?? {
-  // Include loopback hosts so dynamic baseURL resolves for local email/password
-  // (not only the preview wildcard).
-  allowedHosts: [...previewAllowedHosts, "localhost", "127.0.0.1", "[::1]"],
-  // `auto` → trust both http:// and https:// expansions of allowedHosts
-  // (preview is https; local dev is http).
-  protocol: "auto" as const,
-  fallback: "http://localhost:8080",
-};
-
-// Origins Better Auth accepts on credentialed POSTs (sign-up/sign-in, etc.).
-// Matches request origin dynamically or allows trusted wildcard patterns.
-const trustedOrigins = (request?: Request): string[] => {
-  const result: string[] = [
-    ...(explicitBaseURL ? [explicitBaseURL, explicitBaseURL.replace(/^https?:\/\//, "")] : []),
+  // Include loopback hosts AND hosting platform hosts so dynamic baseURL resolves
+  // for email/password on any deployment target.
+  allowedHosts: [
     ...previewAllowedHosts,
-    ...previewAllowedHosts.flatMap((host) => [`https://${host}`, `http://${host}`]),
-    ...LOCAL_DEV_ORIGINS,
-    "https://auto-social-poster-f6fs.onrender.com",
-    "http://auto-social-poster-f6fs.onrender.com",
+    "localhost",
+    "127.0.0.1",
+    "[::1]",
     "auto-social-poster-f6fs.onrender.com",
     "*.onrender.com",
     "*.vercel.app",
-  ];
-  if (request) {
-    const origin = request.headers.get("origin") || request.headers.get("referer");
-    if (origin) {
-      try {
-        const u = new URL(origin);
-        result.push(u.origin);
-      } catch {
-        // ignore
-      }
-    }
-  }
-  return result;
+  ],
+  // `auto` → trust both http:// and https:// expansions of allowedHosts
+  // (preview is https; local dev is http; render/vercel are https).
+  protocol: "auto" as const,
+  fallback: "https://auto-social-poster-f6fs.onrender.com",
 };
+
+// Origins Better Auth accepts on credentialed POSTs (sign-up/sign-in, etc.).
+// Missing entries here surface as FORBIDDEN "Invalid origin".
+const trustedOrigins: string[] = [
+  ...(explicitBaseURL ? [explicitBaseURL] : []),
+  ...previewAllowedHosts,
+  ...previewAllowedHosts.flatMap((host) => [`https://${host}`, `http://${host}`]),
+  ...LOCAL_DEV_ORIGINS,
+  "https://auto-social-poster-f6fs.onrender.com",
+  "http://auto-social-poster-f6fs.onrender.com",
+];
 
 const databaseUrl = env("DATABASE_URL");
 
