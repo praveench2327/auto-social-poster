@@ -1,3 +1,8 @@
+import dns from "node:dns";
+if (typeof dns.setDefaultResultOrder === "function") {
+  dns.setDefaultResultOrder("ipv4first");
+}
+
 const GRAPH = "https://graph.facebook.com/v21.0";
 const DIALOG = "https://www.facebook.com/v21.0/dialog/oauth";
 
