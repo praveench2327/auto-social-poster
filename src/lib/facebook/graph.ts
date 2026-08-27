@@ -52,38 +52,88 @@ export class FacebookApiError extends Error {
   }
 }
 
-/** Fetch wrapper that forces IPv4 to avoid Windows IPv6 timeouts. */
-function fbFetch(url: string, init?: RequestInit): Promise<Response> {
-  if (typeof dns.setDefaultResultOrder === "function") {
-    dns.setDefaultResultOrder("ipv4first");
-  }
-  return fetch(url, init);
+/** Robust HTTPS request to Facebook Graph API forcing IPv4 */
+function fbRequest<T>(options: {
+  method: "GET" | "POST";
+  path: string;
+  query?: Record<string, string>;
+  body?: Record<string, string>;
+}): Promise<T> {
+  return new Promise((resolve, reject) => {
+    let fullPath = `/v21.0${options.path}`;
+    if (options.query && Object.keys(options.query).length > 0) {
+      fullPath += `?${new URLSearchParams(options.query).toString()}`;
+    }
+
+    const postData = options.body ? new URLSearchParams(options.body).toString() : "";
+    const headers: Record<string, string> = {};
+    if (options.method === "POST") {
+      headers["Content-Type"] = "application/x-www-form-urlencoded";
+      headers["Content-Length"] = Buffer.byteLength(postData).toString();
+    }
+
+    const req = https.request(
+      {
+        hostname: "graph.facebook.com",
+        port: 443,
+        path: fullPath,
+        method: options.method,
+        headers,
+        family: 4, // Explicitly force IPv4 to avoid Windows DNS timeout
+        timeout: 15000,
+      },
+      (res) => {
+        let rawData = "";
+        res.setEncoding("utf8");
+        res.on("data", (chunk) => {
+          rawData += chunk;
+        });
+        res.on("end", () => {
+          try {
+            const json = JSON.parse(rawData);
+            if (res.statusCode && res.statusCode >= 400) {
+              const errMsg = json.error?.message || `Facebook Graph API error (status ${res.statusCode})`;
+              return reject(new FacebookApiError(errMsg));
+            }
+            if (json.error) {
+              return reject(new FacebookApiError(json.error.message || "Facebook Graph API returned an error"));
+            }
+            resolve(json as T);
+          } catch {
+            if (res.statusCode && res.statusCode >= 400) {
+              return reject(new FacebookApiError(`Facebook Graph API HTTP error ${res.statusCode}`));
+            }
+            reject(new FacebookApiError("Invalid response from Facebook Graph API"));
+          }
+        });
+      },
+    );
+
+    req.on("timeout", () => {
+      req.destroy();
+      reject(new FacebookApiError("Connection to Facebook Graph API timed out"));
+    });
+
+    req.on("error", (err) => {
+      reject(new FacebookApiError(`Facebook connection error: ${err.message}`));
+    });
+
+    if (options.method === "POST" && postData) {
+      req.write(postData);
+    }
+    req.end();
+  });
 }
 
 async function graphGet<T>(path: string, query: Record<string, string>): Promise<T> {
-  const url = `${GRAPH}${path}?${new URLSearchParams(query).toString()}`;
-  const res = await fbFetch(url);
-  const json = (await res.json()) as T & { error?: { message?: string } };
-  if (!res.ok || json.error) {
-    throw new FacebookApiError(json.error?.message || `Graph error ${res.status}`);
-  }
-  return json;
+  return fbRequest<T>({ method: "GET", path, query });
 }
 
 async function graphPost<T>(
   path: string,
   body: Record<string, string>,
 ): Promise<T> {
-  const res = await fbFetch(`${GRAPH}${path}`, {
-    method: "POST",
-    headers: { "Content-Type": "application/x-www-form-urlencoded" },
-    body: new URLSearchParams(body),
-  });
-  const json = (await res.json()) as T & { error?: { message?: string } };
-  if (!res.ok || json.error) {
-    throw new FacebookApiError(json.error?.message || `Graph error ${res.status}`);
-  }
-  return json;
+  return fbRequest<T>({ method: "POST", path, body });
 }
 
 export async function exchangeCodeForToken(code: string, redirectUri: string) {
