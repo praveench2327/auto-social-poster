@@ -114,7 +114,7 @@ const baseURL = explicitBaseURL ?? {
 };
 
 // Origins Better Auth accepts on credentialed POSTs (sign-up/sign-in, etc.).
-// Missing entries here surface as FORBIDDEN "Invalid origin".
+// Supports dynamic host resolution + all Vercel, Render and localhost origins.
 const trustedOrigins: string[] = [
   ...(explicitBaseURL ? [explicitBaseURL, explicitBaseURL.replace(/^https?:\/\//, "")] : []),
   ...previewAllowedHosts,
@@ -124,6 +124,7 @@ const trustedOrigins: string[] = [
   "http://auto-social-poster-f6fs.onrender.com",
   "auto-social-poster-f6fs.onrender.com",
   "*.onrender.com",
+  "*.vercel.app",
 ];
 
 const databaseUrl = env("DATABASE_URL");
