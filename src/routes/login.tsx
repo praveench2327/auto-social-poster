@@ -225,11 +225,23 @@ function Login() {
               variant="secondary"
               className="w-full flex items-center justify-center gap-2 font-medium"
               disabled={isLoading}
-              onClick={() => {
+              onClick={async () => {
                 setIsLoading(true);
                 setError(null);
-                // Better Auth direct Google social sign in endpoint
-                window.location.href = "/api/auth/sign-in/social?provider=google&callbackURL=/";
+                try {
+                  const res = await authClient.signIn.social({
+                    provider: "google",
+                    callbackURL: "/",
+                  });
+                  if (res?.error) {
+                    setError(res.error.message || "Failed to initiate Google sign in.");
+                  }
+                } catch (err: unknown) {
+                  if (err instanceof Error) setError(err.message);
+                  else setError("Google sign-in error occurred.");
+                } finally {
+                  setIsLoading(false);
+                }
               }}
             >
               <svg className="size-4" viewBox="0 0 24 24">
