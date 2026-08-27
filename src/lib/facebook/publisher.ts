@@ -64,6 +64,7 @@ export async function publishOnePost(post: DuePost): Promise<void> {
       where id = ${post.id} and user_id = ${post.user_id}
     `;
   } catch (err) {
+    console.error("[publishOnePost failed]:", err);
     const message = err instanceof Error ? err.message : "Publish failed";
     await sql`
       update facebook_posts
