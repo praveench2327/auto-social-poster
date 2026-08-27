@@ -1,0 +1,29 @@
+# -- App URLs --
+# Where the React app is served. The backend builds password-reset and
+# email-change links against this base, so it must match the frontend origin.
+# Local dev: http://localhost:3000 - production: your deployed frontend URL.
+FRONTEND_URL=http://localhost:3000
+PUBLIC_BASE_URL="https://marketnow.biz"
+
+# -- Database + auth tokens --
+DATABASE_URL=postgresql://postgres:marketnow@localhost:5432/marketnow
+JWT_SECRET=eHiMwZbsxwDE0ndlnnAdZ1nlMhOwkN9WNegY0tZs9ZB8L4jhe8HOgczUNCwP2imrfmRKiNA38XboXw4i99xbLQ
+RESET_TOKEN_SECRET="buJUAeNfGxqR5jbR8dAppXNZmxn9z4C__rPmmWqJxE7J6eO7gV0Eqszu_96kjQK5"
+
+# -- SMTP (password reset + email change mail) --
+SMTP_EMAIL="marketnow.pvt1@gmail.com"
+SMTP_APP_PASSWORD="uois hmym pvzm ywcb"
+
+# -- Google OAuth (Continue with Google) --
+GOOGLE_CLIENT_ID="373579987612-7sf566bme8ngue7qqusvd8ge2vf1hgts.apps.googleusercontent.com"
+GOOGLE_CLIENT_SECRET="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"
+
+# -- LinkedIn OAuth (linkedin_1.py) --
+LINKEDIN_CLIENT_ID="86gwk0l77y20y1"
+LINKEDIN_CLIENT_SECRET="WPL_AP1.mj0LHssU4yBjHOtL.bSamRg=="
+
+# -- Meta / Facebook OAuth (meta_1.py) --
+META_APP_ID="1005076451937646"
+META_APP_SECRET="be17bbf3cb1d2bc918226ad0e5a4c889"
+META_LOGIN_CONFIG_ID=""
+META_INCLUDE_INSTAGRAM_SCOPES="true"
