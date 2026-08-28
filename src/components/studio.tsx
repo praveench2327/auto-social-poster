@@ -170,17 +170,25 @@ export function Studio() {
   }
 
   async function onWrite() {
+    const inputTopic = topic.trim() || body.trim();
+    if (!inputTopic) {
+      setNotice("Please enter a topic or key points for the AI writer first.");
+      return;
+    }
     setBusy("ai");
     setNotice(null);
     const result = await generateCaption({
       data: {
-        topic: topic || body || "an upcoming announcement and update",
+        topic: inputTopic,
         tone: "engaging and professional",
         imageUrl,
       },
     });
     if (!result.ok) setNotice(result.error);
-    else setBody(result.text);
+    else {
+      setBody(result.text);
+      setNotice("AI post generated! Review and tweak it as needed.");
+    }
     setBusy(null);
   }
 

@@ -383,10 +383,173 @@ export const flushNow = createServerFn({ method: "POST" })
     return { ok: true as const, flushed: n };
   });
 
+async function callAiProviders(prompt: string, systemPrompt: string): Promise<string | null> {
+  // 1. Try xAI (Grok 2)
+  if (process.env.XAI_API_KEY) {
+    try {
+      const res = await fetch("https://api.x.ai/v1/chat/completions", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${process.env.XAI_API_KEY}`,
+        },
+        body: JSON.stringify({
+          model: "grok-2-latest",
+          max_tokens: 600,
+          messages: [
+            { role: "system", content: systemPrompt },
+            { role: "user", content: prompt },
+          ],
+        }),
+      });
+      if (res.ok) {
+        const body = (await res.json()) as { choices?: { message?: { content?: string } }[] };
+        const text = body.choices?.[0]?.message?.content?.trim();
+        if (text) return text;
+      } else {
+        const errText = await res.text();
+        console.warn("[xAI API error]:", res.status, errText);
+      }
+    } catch (err) {
+      console.error("[xAI call failed]:", err);
+    }
+  }
+
+  // 2. Try OpenAI (gpt-4o-mini)
+  if (process.env.OPENAI_API_KEY) {
+    try {
+      const res = await fetch("https://api.openai.com/v1/chat/completions", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${process.env.OPENAI_API_KEY}`,
+        },
+        body: JSON.stringify({
+          model: "gpt-4o-mini",
+          max_tokens: 600,
+          messages: [
+            { role: "system", content: systemPrompt },
+            { role: "user", content: prompt },
+          ],
+        }),
+      });
+      if (res.ok) {
+        const body = (await res.json()) as { choices?: { message?: { content?: string } }[] };
+        const text = body.choices?.[0]?.message?.content?.trim();
+        if (text) return text;
+      }
+    } catch (err) {
+      console.error("[OpenAI call failed]:", err);
+    }
+  }
+
+  // 3. Try Groq (Llama 3.3)
+  if (process.env.GROQ_API_KEY) {
+    try {
+      const res = await fetch("https://api.groq.com/openai/v1/chat/completions", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${process.env.GROQ_API_KEY}`,
+        },
+        body: JSON.stringify({
+          model: "llama-3.3-70b-versatile",
+          max_tokens: 600,
+          messages: [
+            { role: "system", content: systemPrompt },
+            { role: "user", content: prompt },
+          ],
+        }),
+      });
+      if (res.ok) {
+        const body = (await res.json()) as { choices?: { message?: { content?: string } }[] };
+        const text = body.choices?.[0]?.message?.content?.trim();
+        if (text) return text;
+      }
+    } catch (err) {
+      console.error("[Groq call failed]:", err);
+    }
+  }
+
+  // 4. Try Google Gemini
+  if (process.env.GEMINI_API_KEY) {
+    try {
+      const res = await fetch(
+        `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${process.env.GEMINI_API_KEY}`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            systemInstruction: { parts: [{ text: systemPrompt }] },
+            contents: [{ parts: [{ text: prompt }] }],
+            generationConfig: { maxOutputTokens: 600 },
+          }),
+        },
+      );
+      if (res.ok) {
+        const body = (await res.json()) as {
+          candidates?: { content?: { parts?: { text?: string }[] } }[];
+        };
+        const text = body.candidates?.[0]?.content?.parts?.[0]?.text?.trim();
+        if (text) return text;
+      }
+    } catch (err) {
+      console.error("[Gemini call failed]:", err);
+    }
+  }
+
+  return null;
+}
+
+function generateSmartFallback(topic: string, tone?: string, hasVideo?: boolean): string {
+  const cleanTopic = topic.trim();
+  const lower = cleanTopic.toLowerCase();
+
+  // Extract meaningful words for hashtags
+  const words = cleanTopic
+    .replace(/[^\w\s]/gi, "")
+    .split(/\s+/)
+    .filter((w) => w.length > 3);
+  const tagWords = Array.from(new Set(words)).slice(0, 3);
+  const hashtags = tagWords
+    .map((w) => `#${w.charAt(0).toUpperCase() + w.slice(1)}`)
+    .join(" ");
+
+  const headline = cleanTopic.length > 60 ? cleanTopic.slice(0, 57) + "…" : cleanTopic;
+
+  // Detect topic category
+  const isSale = /sale|discount|off|deal|offer|promo|save|price|free/i.test(lower);
+  const isEvent = /event|webinar|workshop|meetup|launch|party|livestream|opening/i.test(lower);
+  const isTip = /tip|how to|guide|tutorial|hack|advice|learn|secret/i.test(lower);
+  const isQuestion = /\?|poll|thought|opinion|vote|feedback|which/i.test(lower);
+
+  if (isSale) {
+    return `🔥 EXCLUSIVE OFFER: ${headline}\n\nWe’ve got something exciting for you! ${cleanTopic}.\n\n⏰ Don't miss out — this is available for a limited time.\n\n👇 Click below or message us directly to claim yours today!\n\n${hashtags} #SpecialOffer #Deals`;
+  }
+
+  if (isEvent) {
+    return `🎉 SAVE THE DATE: ${headline}!\n\n${cleanTopic}.\n\nGet ready for an incredible experience with our team and community.\n\n👉 Tag a friend who should join us, and drop a comment below if you're coming! 🙌\n\n${hashtags} #Events #Community`;
+  }
+
+  if (isTip) {
+    return `💡 Pro Tip: ${headline}\n\n${cleanTopic}.\n\nTaking small, consistent steps makes all the difference in achieving top results. Try this out and let us know how it works for you!\n\n💬 Have questions or your own tips to share? Join the conversation in the comments below!\n\n${hashtags} #TipsAndTricks #Growth`;
+  }
+
+  if (isQuestion) {
+    return `🤔 Quick Question for You:\n\n${cleanTopic}\n\nWe want to hear from our amazing community! Drop your thoughts, experiences, or votes in the comments below 👇❤️\n\n${hashtags} #Discussion #Feedback`;
+  }
+
+  if (hasVideo) {
+    return `🎬 Watch Now: ${headline}\n\n${cleanTopic}.\n\nCheck out the video above to see all the details in action! Let us know what you think in the comments.\n\n✨ Like and share this with someone who needs to see it!\n\n${hashtags} #VideoUpdate #Trending`;
+  }
+
+  return `✨ ${headline}\n\n${cleanTopic}.\n\nWe're always excited to bring you the best updates and keep you informed. Stay tuned for more exciting developments coming soon!\n\n👉 Like, follow, and share your thoughts in the comments below! ❤️\n\n${hashtags || "#Trending #Updates"}`;
+}
+
 export const generateCaption = createServerFn({ method: "POST" })
   .validator((input: { topic: string; tone?: string; imageUrl?: string }) => ({
-    topic: input.topic.trim().slice(0, 400),
-    tone: (input.tone ?? "").trim().slice(0, 40),
+    topic: input.topic.trim().slice(0, 500),
+    tone: (input.tone ?? "").trim().slice(0, 50),
     imageUrl: (input.imageUrl ?? "").trim(),
   }))
   .middleware([authMiddleware])
@@ -396,62 +559,35 @@ export const generateCaption = createServerFn({ method: "POST" })
     }
 
     const effectiveTopic = data.topic || "an exciting new update from our brand";
+    const isVideo =
+      data.imageUrl.includes("video") ||
+      data.imageUrl.endsWith(".mp4") ||
+      data.imageUrl.endsWith(".mov");
 
-    if (process.env.XAI_API_KEY) {
-      try {
-        const res = await fetch("https://api.x.ai/v1/chat/completions", {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            Authorization: `Bearer ${process.env.XAI_API_KEY}`,
-          },
-          body: JSON.stringify({
-            model: "grok-4.5",
-            max_tokens: 350,
-            messages: [
-              {
-                role: "system",
-                content:
-                  "You are an expert social media manager writing high-engagement Facebook Page posts. Write a captivating, natural, and directly relevant post for the given topic. Include 2-3 relevant hashtags at the end, proper spacing, and a call-to-action.",
-              },
-              {
-                role: "user",
-                content: `Topic / Key points: ${effectiveTopic}\nTone: ${data.tone || "engaging, clear, and professional"}${data.imageUrl ? `\nNote: This post includes an attached image: ${data.imageUrl}` : ""}`,
-              },
-            ],
-          }),
-        });
+    const systemPrompt =
+      "You are a world-class social media copywriter for Facebook Pages. " +
+      "Write a high-converting, natural, engaging Facebook Page post based directly on the provided topic and key points. " +
+      "Requirements:\n" +
+      "- Focus closely on the user's specific topic, product, service, or message (do NOT write generic filler).\n" +
+      "- Start with an eye-catching hook / headline (with appropriate emojis).\n" +
+      "- Provide structured, easy-to-read body paragraphs with line breaks.\n" +
+      "- Include a strong, engaging Call-To-Action (CTA) encouraging comments, shares, or visits.\n" +
+      "- End with 2-4 highly relevant hashtags matching the topic keywords.\n" +
+      "- Do NOT include markdown quotes around the whole post or preamble like 'Here is your post:'. Output only the post copy.";
 
-        if (res.ok) {
-          const body = (await res.json()) as {
-            choices?: { message?: { content?: string } }[];
-          };
-          const text = body.choices?.[0]?.message?.content?.trim() ?? "";
-          if (text) return { ok: true as const, text };
-        }
-      } catch {
-        // Fallback below
-      }
+    const userPrompt = `Topic / Details: ${effectiveTopic}\nRequested Tone: ${data.tone || "engaging, clear, and professional"}${
+      data.imageUrl ? `\nMedia Attached: ${isVideo ? "Video" : "Image"}` : ""
+    }`;
+
+    const aiText = await callAiProviders(userPrompt, systemPrompt);
+
+    if (aiText) {
+      return { ok: true as const, text: aiText };
     }
 
-    // Dynamic Context-Aware Generator tailored to the exact topic keywords
-    const keywords = effectiveTopic
-      .split(/[\s,.;]+/)
-      .filter((w) => w.length > 3)
-      .map((w) => w.replace(/[^a-zA-Z0-9]/g, ""));
-    const capitalizedTopic = effectiveTopic.charAt(0).toUpperCase() + effectiveTopic.slice(1);
-
-    const hashtag1 = keywords[0] ? `#${keywords[0].charAt(0).toUpperCase() + keywords[0].slice(1)}` : "#Business";
-    const hashtag2 = keywords[1] ? `#${keywords[1].charAt(0).toUpperCase() + keywords[1].slice(1)}` : "#Trending";
-
-    const templates = [
-      `🌟 ${capitalizedTopic}!\n\nWe are passionate about bringing you the best updates and value. Whether you’re looking for top quality or new ideas, we’ve got something special for you.\n\n👇 What are your thoughts on this? Let us know in the comments below!\n\n${hashtag1} ${hashtag2} #PagePress`,
-      `📢 Big Announcement: ${capitalizedTopic}\n\nHere’s everything you need to know today! Our team has been working hard to deliver an incredible experience for our followers and customers.\n\n👉 Share this with someone who needs to see it! ❤️\n\n${hashtag1} #Community #Updates`,
-      `✨ ${capitalizedTopic}\n\nSuccess is in the details, and we’re always striving to keep you informed and inspired. Stay connected with us for more exciting news.\n\n💬 Drop a like and follow our Page for daily updates!\n\n${hashtag1} ${hashtag2} #StayTuned`,
-    ];
-
-    const randomIndex = Math.floor(Math.random() * templates.length);
-    return { ok: true as const, text: templates[randomIndex] };
+    // High quality intelligent contextual fallback
+    const fallbackText = generateSmartFallback(effectiveTopic, data.tone, isVideo);
+    return { ok: true as const, text: fallbackText };
   });
 
 export const clearHistory = createServerFn({ method: "POST" })
