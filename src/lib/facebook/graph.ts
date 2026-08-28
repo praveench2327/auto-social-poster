@@ -202,9 +202,23 @@ export async function publishFacebookPhoto(
   });
 }
 
+export async function publishFacebookVideo(
+  pageId: string,
+  pageToken: string,
+  description: string,
+  videoUrl: string,
+) {
+  return graphPost<{ id: string; post_id?: string }>(`/${pageId}/videos`, {
+    file_url: videoUrl,
+    description,
+    access_token: pageToken,
+  });
+}
+
 export async function inspectPageToken(pageToken: string) {
   return graphGet<{ id: string; name?: string }>("/me", {
     access_token: pageToken,
     fields: "id,name",
   });
 }
+

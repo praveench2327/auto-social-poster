@@ -4,6 +4,7 @@ import {
   FacebookApiError,
   publishFacebookPhoto,
   publishFacebookText,
+  publishFacebookVideo,
 } from "./graph";
 
 type DuePost = {
@@ -12,6 +13,20 @@ type DuePost = {
   body: string;
   image_url: string | null;
 };
+
+function isVideoUrl(url: string): boolean {
+  if (!url) return false;
+  const lower = url.toLowerCase();
+  return (
+    lower.startsWith("data:video/") ||
+    lower.endsWith(".mp4") ||
+    lower.endsWith(".mov") ||
+    lower.endsWith(".webm") ||
+    lower.endsWith(".m4v") ||
+    lower.includes("/video/") ||
+    lower.includes("video=true")
+  );
+}
 
 type PageRow = {
   page_id: string;
@@ -41,13 +56,23 @@ export async function publishOnePost(post: DuePost): Promise<void> {
     } else {
       const token = decryptSecret(page.access_token);
       if (post.image_url) {
-        const result = await publishFacebookPhoto(
-          page.page_id,
-          token,
-          post.body,
-          post.image_url,
-        );
-        platformId = result.post_id || result.id || "";
+        if (isVideoUrl(post.image_url)) {
+          const result = await publishFacebookVideo(
+            page.page_id,
+            token,
+            post.body,
+            post.image_url,
+          );
+          platformId = result.post_id || result.id || "";
+        } else {
+          const result = await publishFacebookPhoto(
+            page.page_id,
+            token,
+            post.body,
+            post.image_url,
+          );
+          platformId = result.post_id || result.id || "";
+        }
       } else {
         const result = await publishFacebookText(page.page_id, token, post.body);
         platformId = result.id || "";

@@ -1,15 +1,20 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { format, formatDistanceToNow } from "date-fns";
 import {
   CalendarClock,
   Check,
   Facebook,
+  Film,
+  Image as ImageIcon,
+  Link2,
   LoaderCircle,
   PenLine,
   RefreshCw,
   Send,
   Sparkles,
+  Trash2,
   Unplug,
+  UploadCloud,
   X,
 } from "lucide-react";
 import { UserButton } from "@/lib/auth/gates";
@@ -48,12 +53,30 @@ function statusTone(status: string): "ok" | "warn" | "danger" | "info" | "neutra
   return "neutral";
 }
 
+function isVideoAttachment(url: string | null | undefined): boolean {
+  if (!url) return false;
+  const lower = url.toLowerCase();
+  return (
+    lower.startsWith("data:video/") ||
+    lower.endsWith(".mp4") ||
+    lower.endsWith(".mov") ||
+    lower.endsWith(".webm") ||
+    lower.endsWith(".m4v") ||
+    lower.includes("/video/") ||
+    lower.includes("video=true")
+  );
+}
+
 export function Studio() {
   const user = useCurrentUser();
   const [status, setStatus] = useState<PageStatus | null>(null);
   const [posts, setPosts] = useState<PostRow[] | null>(null);
   const [body, setBody] = useState("");
   const [imageUrl, setImageUrl] = useState("");
+  const [mediaMode, setMediaMode] = useState<"upload" | "url">("upload");
+  const [mediaFile, setMediaFile] = useState<{ name: string; size: string; type: string } | null>(null);
+  const [isDragging, setIsDragging] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
   const [when, setWhen] = useState(() => localDatetimeValue(new Date(Date.now() + 5 * 60 * 1000)));
   const [topic, setTopic] = useState("");
   const [busy, setBusy] = useState<string | null>(null);
@@ -161,6 +184,53 @@ export function Studio() {
     setBusy(null);
   }
 
+  function handleFileSelect(file: File) {
+    if (!file) return;
+    if (!file.type.startsWith("image/") && !file.type.startsWith("video/")) {
+      setNotice("Please select a valid image (PNG, JPG, WebP, GIF) or video (MP4, MOV, WebM).");
+      return;
+    }
+    if (file.size > 50 * 1024 * 1024) {
+      setNotice("Media file is too large. Please select a file under 50MB.");
+      return;
+    }
+    const sizeStr =
+      file.size > 1024 * 1024
+        ? `${(file.size / (1024 * 1024)).toFixed(1)} MB`
+        : `${Math.round(file.size / 1024)} KB`;
+
+    setMediaFile({
+      name: file.name,
+      size: sizeStr,
+      type: file.type,
+    });
+    setNotice(null);
+
+    const reader = new FileReader();
+    reader.onload = () => {
+      if (typeof reader.result === "string") {
+        setImageUrl(reader.result);
+      }
+    };
+    reader.readAsDataURL(file);
+  }
+
+  function handleDrop(e: React.DragEvent) {
+    e.preventDefault();
+    setIsDragging(false);
+    if (e.dataTransfer.files && e.dataTransfer.files[0]) {
+      handleFileSelect(e.dataTransfer.files[0]);
+    }
+  }
+
+  function clearMedia() {
+    setImageUrl("");
+    setMediaFile(null);
+    if (fileInputRef.current) {
+      fileInputRef.current.value = "";
+    }
+  }
+
   async function onSchedule(immediate: boolean) {
     setBusy("save");
     setNotice(null);
@@ -171,7 +241,7 @@ export function Studio() {
     if (!result.ok) setNotice(result.error);
     else {
       setBody("");
-      setImageUrl("");
+      clearMedia();
       setTopic("");
       setNotice(immediate ? "Sending to Facebook…" : "Queued. PagePress will post it automatically.");
       await refresh();
@@ -231,13 +301,136 @@ export function Studio() {
           />
           <div className="mt-1 flex justify-end text-xs tabular-nums text-fg-subtle">{body.length}/5000</div>
 
-          <label className="mt-2 block text-xs font-medium text-fg-muted">Image URL (optional)</label>
-          <Input
-            className="mt-1.5"
-            value={imageUrl}
-            onChange={(e) => setImageUrl(e.target.value)}
-            placeholder="https://…"
-          />
+          {/* Media Attachment (Image or Video) */}
+          <div className="mt-4">
+            <div className="flex items-center justify-between">
+              <label className="block text-xs font-medium text-fg-muted">
+                Media Attachment (Optional)
+              </label>
+              <div className="flex items-center gap-1 rounded-md bg-surface-muted p-0.5 text-xs">
+                <button
+                  type="button"
+                  onClick={() => setMediaMode("upload")}
+                  className={`flex items-center gap-1 rounded px-2.5 py-1 text-xs transition cursor-pointer ${
+                    mediaMode === "upload"
+                      ? "bg-surface text-fg shadow-xs font-medium"
+                      : "text-fg-subtle hover:text-fg"
+                  }`}
+                >
+                  <UploadCloud className="size-3.5" />
+                  Upload File
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setMediaMode("url")}
+                  className={`flex items-center gap-1 rounded px-2.5 py-1 text-xs transition cursor-pointer ${
+                    mediaMode === "url"
+                      ? "bg-surface text-fg shadow-xs font-medium"
+                      : "text-fg-subtle hover:text-fg"
+                  }`}
+                >
+                  <Link2 className="size-3.5" />
+                  Paste URL
+                </button>
+              </div>
+            </div>
+
+            {imageUrl ? (
+              <div className="mt-2 relative overflow-hidden rounded-xl border border-border bg-surface-muted/50 p-3">
+                <div className="flex items-start gap-3">
+                  <div className="relative flex size-20 shrink-0 items-center justify-center overflow-hidden rounded-lg border border-border bg-black/5">
+                    {isVideoAttachment(imageUrl) ? (
+                      <video
+                        src={imageUrl}
+                        className="size-full object-cover"
+                        muted
+                        playsInline
+                      />
+                    ) : (
+                      <img
+                        src={imageUrl}
+                        alt="Attached media preview"
+                        className="size-full object-cover"
+                      />
+                    )}
+                  </div>
+                  <div className="flex-1 min-w-0 pr-8">
+                    <div className="flex items-center gap-1.5">
+                      {isVideoAttachment(imageUrl) ? (
+                        <Film className="size-4 text-accent shrink-0" />
+                      ) : (
+                        <ImageIcon className="size-4 text-accent shrink-0" />
+                      )}
+                      <p className="truncate text-xs font-medium text-fg">
+                        {mediaFile?.name || (imageUrl.startsWith("data:") ? "Uploaded Media" : imageUrl)}
+                      </p>
+                    </div>
+                    {mediaFile?.size && (
+                      <p className="mt-0.5 text-[11px] text-fg-subtle">Size: {mediaFile.size}</p>
+                    )}
+                    <p className="mt-1 text-[11px] text-ok flex items-center gap-1">
+                      <Check className="size-3" /> Ready to publish
+                    </p>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={clearMedia}
+                  className="absolute right-2.5 top-2.5 rounded-md p-1.5 text-fg-subtle hover:bg-danger/10 hover:text-danger transition cursor-pointer"
+                  title="Remove attachment"
+                >
+                  <Trash2 className="size-4" />
+                </button>
+              </div>
+            ) : mediaMode === "upload" ? (
+              <div
+                onDragOver={(e) => {
+                  e.preventDefault();
+                  setIsDragging(true);
+                }}
+                onDragLeave={() => setIsDragging(false)}
+                onDrop={handleDrop}
+                onClick={() => fileInputRef.current?.click()}
+                className={`mt-2 flex cursor-pointer flex-col items-center justify-center rounded-xl border-2 border-dashed p-5 text-center transition ${
+                  isDragging
+                    ? "border-accent bg-accent/5 scale-[0.99]"
+                    : "border-border hover:border-fg-subtle hover:bg-surface-muted/40"
+                }`}
+              >
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  accept="image/png,image/jpeg,image/webp,image/gif,video/mp4,video/quicktime,video/webm"
+                  className="hidden"
+                  onChange={(e) => {
+                    if (e.target.files && e.target.files[0]) {
+                      handleFileSelect(e.target.files[0]);
+                    }
+                  }}
+                />
+                <div className="flex size-10 items-center justify-center rounded-full bg-surface-muted text-fg-muted mb-2">
+                  <UploadCloud className="size-5" />
+                </div>
+                <p className="text-xs font-medium text-fg">
+                  Click to upload or drag & drop image / video
+                </p>
+                <p className="mt-1 text-[11px] text-fg-subtle">
+                  Supports Images (PNG, JPG, WebP, GIF) and Videos (MP4, MOV, WebM) up to 50MB
+                </p>
+              </div>
+            ) : (
+              <div className="mt-2">
+                <Input
+                  value={imageUrl}
+                  onChange={(e) => {
+                    setImageUrl(e.target.value);
+                    setMediaFile(null);
+                  }}
+                  placeholder="https://example.com/photo.jpg or https://.../video.mp4"
+                />
+              </div>
+            )}
+          </div>
 
           <div className="mt-4 flex flex-col gap-3 sm:flex-row sm:items-end">
             <div className="flex-1">
@@ -424,7 +617,28 @@ function QueueColumn({
           {posts.map((post) => (
             <li key={post.id} className="rounded-lg border border-border bg-surface p-4">
               <div className="flex items-start justify-between gap-3">
-                <p className="line-clamp-3 text-sm leading-relaxed">{post.body}</p>
+                <div className="flex-1 min-w-0">
+                  <p className="line-clamp-3 text-sm leading-relaxed">{post.body}</p>
+                  {post.imageUrl && (
+                    <div className="mt-2.5 flex items-center gap-2">
+                      {isVideoAttachment(post.imageUrl) ? (
+                        <div className="inline-flex items-center gap-1.5 rounded-md bg-surface-muted px-2 py-1 text-xs text-fg-muted border border-border">
+                          <Film className="size-3.5 text-accent" />
+                          <span>Video attached</span>
+                        </div>
+                      ) : (
+                        <div className="flex items-center gap-2">
+                          <img
+                            src={post.imageUrl}
+                            alt="Attachment"
+                            className="size-10 rounded-md object-cover border border-border"
+                          />
+                          <span className="text-xs text-fg-subtle">Image attached</span>
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
                 <Badge tone={statusTone(post.status)}>{post.status}</Badge>
               </div>
               <p className="mt-2 text-xs text-fg-subtle">
